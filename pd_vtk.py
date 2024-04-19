@@ -59,10 +59,11 @@ def pv_read(fp):
     mesh = gltf_to_vtk(gltf)
   elif re.search(r'vt(k|p|m)$', fp, re.IGNORECASE):
     mesh = pv.read(fp)
-    for name in mesh.field_data:
-      if len(name) == 1:
-        v = mesh.field_data[name]
-        mesh.textures[int(name)] = pv.Texture(np.reshape(v, (v.shape[0],-1,3)))
+    if sys.hexversion >= 0x3080000:
+      for name in mesh.field_data:
+        if len(name) == 1:
+          v = mesh.field_data[name]
+          mesh.textures[int(name)] = pv.Texture(np.reshape(v, (v.shape[0],-1,3)))
 
   else:
     from _gui import pd_load_dataframe
@@ -296,8 +297,6 @@ def vtk_grid_points_to_df(grid, xyz):
   arr_data = [pd.Series(grid.get_array(name), name=name) for name in grid.point_data]
 
   return pd.concat([pd.DataFrame(grid.points, columns=xyz), pd.Series(arr_n, name='n'), pd.Series(arr_node, name='node')] + arr_data, axis=1)
-
-
 
 # dmbm_to_vtk
 def vtk_dmbm_to_ug(df):
@@ -543,7 +542,7 @@ def vtk_spacing_fit(dims, d0, d1, cell = None):
   return spacing
 
 def vtk_shape_ijk(dims, cell = None):
-  shape = np.flip(dims)
+  shape = np.flipud(dims)
   if cell:
     shape = np.maximum(np.subtract(shape, 1), 1)
   return shape
@@ -627,7 +626,7 @@ class vtk_Voxel(object):
     #np.add(dims, 1, dtype = np.int_, casting = 'unsafe').tolist()
     o0 = bm.model_schema_extent(n_schema)
     origin = np.add(bm.model_origin(), o0[:3])
-    self = cls(dims, size, origin[:3])
+    self = cls.cls_init(dims, size, origin[:3])
     #print(cls(dims=(10,10,10)))
     bearing, dip, plunge = bm.model_orientation()
     
@@ -996,6 +995,41 @@ class vtk_Voxel(object):
 
     return cp
 
+  def to_bmf(self, output = None):
+    import vulcan
+    if not output:
+      import tempfile
+      output = tempfile.NamedTemporaryFile(suffix='.bmf').name
+    bb = np.reshape(self.bounds, (3,2))
+    xyzn = np.maximum(np.subtract(self.dimensions, 1), 1)
+    bm = vulcan.block_model()
+    xyz1 = np.multiply(xyzn, vtk_cell_size(self))
+    log("create regular")
+    bm.create_regular(output, 0, 0, 0, *xyz1, int(xyzn[0]), int(xyzn[1]), int(xyzn[2]))
+    bm.set_model_origin(bb[0, 0], bb[1, 0], bb[2, 0])
+    #bl = bm.get_regular_indices()
+    bl = np.arange(bm.n_blocks())
+    log("index model")
+    bm.index_model()
+    bm.write()
+    for v in self.cell_arrays:
+      if bm.field_predefined(v):
+        continue
+      #s = np.transpose(vtk_array_ijk(self, v, True), (1,0,2))
+      #s = np.transpose(np.reshape(self.get_array(v), xyzn), (2,1,0))
+      s = self.get_array(v)
+      if s.dtype.num < 17:
+        log('add variable', v, s.dtype, s.size, 'float')
+        bm.add_variable(v, 'float', '-99', '')
+      else:
+        log('add variable', v, s.dtype, s.size, 'name')
+        bm.add_variable(v, 'name', 'n', '')
+      bm.put_grid(v, s)
+
+    bm.write()
+
+    return bm
+
   @classmethod
   def factory(cls, data = None):
     otype = None
@@ -1010,7 +1044,10 @@ class vtk_Voxel(object):
     if otype == 2:
       f = type('vtk_VoxelSG', (vtk_Voxel, pv.StructuredGrid), {})
     elif otype == 6 or otype is None:
-      f = type('vtk_VoxelUG', (vtk_Voxel, pv.ImageData), {})
+      if sys.hexversion < 0x3080000:
+        f = type('vtk_VoxelUG', (vtk_Voxel, pv.UniformGrid), {})
+      else:
+        f = type('vtk_VoxelUG', (vtk_Voxel, pv.ImageData), {})
 
     if f is None:
       return None
@@ -1261,30 +1298,19 @@ def vtk_meshes_bb(meshes, buffer = None):
 
   return np.stack([bounds0, bounds1])
 
-def vtk_grid_flag_ijk(grid, flag_var = None, preference = 'cell'):
-  if not flag_var:
-    flag_var = 'vtk_ijk'
-  if preference == 'cell':
-    # generate basic positional indices, reversed
-    #ijk = np.transpose(np.indices(np.subtract(grid.dimensions, 1)), np.arange(3,-1,-1))
-    ijk = np.transpose(np.indices(vtk_shape_ijk(grid.dimensions, True)), np.arange(3,-1,-1))
-    print(ijk.shape)
-    # apply a integer dimension to enable the next step
-    ijk = np.multiply(ijk, np.power(10, np.arange(0,9,3)))
-    # convert 3 indices into a single integer value xxxyyyzzz
-    ijk = np.add.reduce(ijk, 3)
+def vtk_grid_flag_ijk(grid, flag_var = 'ijk', cell = True):
+  # generate basic positional indices, reversed
+  ijk = np.moveaxis(np.indices(vtk_shape_ijk(grid.dimensions, True)), 0, -1)
+  # apply a integer dimension to enable the next step
+  ijk = np.multiply(ijk, np.power(10, np.arange(6, -1, -3)))
+  # convert 3 indices into a single integer value xxxyyyzzz
+  ijk = np.add.reduce(ijk, 3)
+  if cell:
     if sys.hexversion < 0x3080000:
       grid.cell_arrays[flag_var] = ijk.flat
     else:
       grid.cell_data[flag_var] = ijk.flat
   else:
-    # generate basic positional indices, reversed
-    #ijk = np.transpose(np.indices(grid.dimensions), np.arange(3,-1,-1))
-    ijk = np.transpose(np.indices(vtk_shape_ijk(grid.dimensions)), np.arange(3,-1,-1))
-    # apply a integer dimension to enable the next step
-    ijk = np.multiply(ijk, np.power(10, np.arange(0,9,3)))
-    # convert 3 indices into a single integer value xxxyyyzzz
-    ijk = np.add.reduce(ijk, 3)
     if sys.hexversion < 0x3080000:
       grid.point_arrays[flag_var] = ijk.flat
     else:
@@ -1411,27 +1437,26 @@ def vtk_tif_to_grid(fp, cell_size = (1,1,1)):
     grid.cell_data['0'] = img.flat
     return grid
 
-def vtk_reblock(grid, cell_size):
-  if np.ndim(cell_size) < 1:
-    cell_size = np.full(3, float(cell_size))
-  print(vtk_mesh_info(grid))
-
-  s0 = vtk_array_ijk(grid, None, False)
-
-  d = np.divide(np.multiply(grid.spacing, np.add(grid.dimensions,1)), cell_size).astype(np.int_)
-  mesh = pv.ImageData(spacing=cell_size, dimensions=d)
-  print(mesh)
-
-  s1 = vtk_array_ijk(mesh, None, False)
-  print(s0.shape)
-  print(s1.shape)
+#def vtk_reblock(grid, cell_size):
+#  if np.ndim(cell_size) < 1:
+#    cell_size = np.full(3, float(cell_size))
+#  print(vtk_mesh_info(grid))
+#  s0 = vtk_array_ijk(grid, None, False)
+#  d = np.divide(np.multiply(grid.spacing, np.add(grid.dimensions,1)), cell_size).astype(np.int_)
+#  mesh = pv.ImageData(spacing=cell_size, dimensions=d)
+#  print(mesh)
+#  s1 = vtk_array_ijk(mesh, None, False)
+#  print(s0.shape)
+#  print(s1.shape)
   #if np.sum(np.mod(ncell_size, grid.spacing)) > 0.01:
   #  raise Exception('new cell size',cell_size,'must be a multiple of current cell size',grid.spacing)
 
 
-# if __name__=="__main__":
-#   if len(sys.argv) > 1:
-#     #grid = vtk_Voxel.factory('std_voxel_0.vtk')
-#     grid = pv.ImageData(spacing=(10,10,10), dimensions=(100,100,100))
-#     grid.cell_data['volume'] = np.random.randint(900,999,grid.n_cells)
-#     vtk_reblock(grid, sys.argv[1])
+#if __name__=="__main__":
+#  if len(sys.argv) > 1:
+    #grid = vtk_Voxel.factory('std_voxel_0.vtk')
+    # grid = vtk_Voxel.cls_init((100,100,100),(10,10,10), (1000,1000,1000))
+    # grid.cells_volume('volume')
+    # vtk_grid_flag_ijk(grid, 'ijk')
+    # print(vtk_mesh_info(grid))
+    # grid.to_bmf(sys.argv[1])

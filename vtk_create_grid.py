@@ -7,10 +7,11 @@
 # ijk: calculate block index field
 # i_j_k: create three indexes, one for each dimention
 # n: create a increasing variable that goes from 0 to 1 across all blocks
+# row: create a increasing variable that goes from 1 to n of blocks
 # volume: calculate volume field
 
 '''
-usage: $0 schema x0 y0 z0 x1 y1 z1 border=0,1 ijk@ i_j_k@ n@ volume@ output*vtk,csv,xlsx display@
+usage: $0 schema x0 y0 z0 x1 y1 z1 border=0,1 ijk@ i_j_k@ n@ row@ volume@ output*vtk,csv,xlsx display@
 '''
 import sys, os.path, re
 import numpy as np
@@ -23,7 +24,7 @@ from _gui import usage_gui, log
 
 from pd_vtk import vtk_Voxel, pv_save, vtk_mesh_info, vtk_grid_flag_ijk, vtk_shape_ijk, vtk_plot_grids
 
-def vtk_create_grid(schema, x0, y0, z0, x1, y1, z1, border, ijk, i_j_k, n, volume, output, display):
+def vtk_create_grid(schema, x0, y0, z0, x1, y1, z1, border, ijk, i_j_k, n, row, volume, output, display):
   if not border:
     border = 0
   else:
@@ -41,6 +42,9 @@ def vtk_create_grid(schema, x0, y0, z0, x1, y1, z1, border, ijk, i_j_k, n, volum
     
   if int(n):
     grid['n'] = np.linspace(1, 0, grid.n_cells, True)
+
+  if int(row):
+    grid['row'] = np.arange(1, grid.n_cells + 1)
 
   if int(volume):
     grid.cells_volume('volume')
