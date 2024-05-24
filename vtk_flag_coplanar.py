@@ -21,6 +21,7 @@ def vtk_flag_coplanar(data, values, flag, coplanar_borders, output, display):
   if grid is None:
     print("data is not a schema or a grid")
     return 1
+
   grid.cell_data[flag] = grid.coplanar(values, int(coplanar_borders))
   print(vtk_mesh_info(grid))
   if output:
@@ -28,7 +29,6 @@ def vtk_flag_coplanar(data, values, flag, coplanar_borders, output, display):
 
   if int(display):
     from db_voxel_view import pd_voxel_view
-    #pd_voxel_view(vtk_array_ijk(grid, flag), None, flag)
     pd_voxel_view(vtk_reshape_a3d(grid.dimensions, grid.get_array(flag), True), None, flag)
 
   log("# vtk_flag_coplanar finished")
