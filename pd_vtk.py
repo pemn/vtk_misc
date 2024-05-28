@@ -334,6 +334,20 @@ def vtk_voxel_view(grid, v):
   from db_voxel_view import pd_voxel_view
   return pd_voxel_view(vtk_reshape_a3d(grid.dimensions, grid.get_array(v), True), None, v)
 
+def vtk_delete_arrays(mesh, names = None):
+  if names is None:
+    names = mesh.array_names
+  elif not isinstance(names, (list, tuple)):
+    names = [names]
+
+  for name in names:
+    if mesh.get_array_association(name) == pv.FieldAssociation.CELL:
+      del mesh.cell_data[name]
+    else:
+      del mesh.point_data[name]
+
+  return mesh
+
 def vtk_plot_meshes(meshes, point_labels=False, cmap = None, scalars = None):
   # plt.cm.terrain
   # plt.cm.plasma
