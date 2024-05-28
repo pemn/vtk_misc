@@ -603,7 +603,7 @@ def vtk_plot_grid_vars(grid, variables):
       u, s = np.unique(s, return_inverse=True)
       s = vtk_reshape_ijk(grid.dimensions, s, True)
     if np.var(s):
-      s = np.maximum(np.divide(np.subtract(s, np.min(s)), np.subtract(np.max(s), np.min(s))), 0.001)
+      s = np.maximum(np.divide(np.subtract(s, np.nanmin(s)), np.subtract(np.nanmax(s), np.nanmin(s))), 0.001)
     ax.flat[i].set_title(variables[i])
     ax.flat[i].voxels(s, facecolors=cmap(s))
 
@@ -1051,7 +1051,7 @@ class vtk_Voxel(object):
         sides = np.eye(3, dtype=np.int_)
         nm = np.concatenate((sides, np.multiply(sides, -1)), 0)
       else:
-        nm = np.reshape(np.transpose(np.subtract(np.indices(np.full(3, distance * 2 + 1)), distance * 2 + 1)), (-1, 3))
+        nm = np.reshape(np.transpose(np.subtract(np.indices(np.full(3, distance * 2 + 1)), distance)), (-1, 3))
         # Remove the center cell
         nm = np.delete(nm, nm.shape[0] // 2, axis=0)
       d = np.flipud(self.shape)
@@ -1442,6 +1442,11 @@ def vtk_linear_model_variables(grid, df1, vl, lito):
     grid.cell_data[v] = df0[v]
   return None
 
+def vtk_krig_model_variables(grid, df1, vl, lito, variogram):
+  from vtk_krig import KrigVar
+  kv = KrigVar(variogram)
+  kv(grid, df1, lito, vl)
+
 def pd_flag_decluster(df0, grid_size, name = 'decluster'):
   mesh = vtk_df_to_mesh(df0)
   grid = vtk_Voxel.from_mesh(mesh, grid_size)
@@ -1486,5 +1491,5 @@ if __name__=="__main__":
     vtk_grid_flag_ijk(grid)
     gcn = grid.find_neighbors(int(sys.argv[1]))
     print(gcn)
-    grid['count'] = np.fromiter(map(len, gcn), np.int_)
-    vtk_plot_grid_vars(grid, ['ijk', 'count'])
+    #grid['count'] = np.fromiter(map(len, gcn), np.int_)
+    #vtk_plot_grid_vars(grid, ['ijk', 'count'])
