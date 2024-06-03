@@ -7,3 +7,4 @@ multiple simple tools related to vtk files and data
  - vtk_flag_ijk: flag ijk (row, col, level) on a vtk grid
  - vtk_util: multiple utilities for vtk format files
  - vtk_marching_cube_shells: create solid shells from grid data
+ - vtk_voxelize_meshes: repair solid meshes by voxelization
