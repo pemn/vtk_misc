@@ -33,26 +33,9 @@ def vtk_util(input_path, var, info, extract_largest, footprint, bounding_box, fa
     mesh = mesh.threshold(0.5).connectivity(True)
 
   if int(footprint):
-    bb = vtk_meshes_bb(mesh)
-    grid = vtk_Voxel.from_bb(bb, 10, 2)
+    grid = vtk_Voxel.from_mesh(mesh, 10, 2)
 
-    cutoff = 0.01
-    
-    if not var:
-      var = 'footprint'
-
-    if var not in mesh.array_names:
-      if sys.hexversion < 0x3080000:
-        mesh.point_arrays[var] = np.ones(mesh.n_points)
-      else:
-        mesh.point_data[var] = np.ones(mesh.n_points)
-    
-    mesh.set_active_scalars(var)
-
-    cutoff = np.nanmean(mesh.active_scalars)
-
-    mesh = grid.interpolate(mesh.ctp(), strategy='closest_point')
-    mesh.set_active_scalars(var)
+    mask = grid.select_enclosed_points(mesh, check_surface=False)
 
     # masks the edges of the grid so the contour will pass there
     i2d = np.zeros((grid.dimensions[1], grid.dimensions[0]), dtype='bool')
@@ -61,9 +44,9 @@ def vtk_util(input_path, var, info, extract_largest, footprint, bounding_box, fa
     i2d[-1, :] = True
     i2d[:, -1] = True
 
-    np.place(mesh.active_scalars, i2d.flat, 0)
+    np.place(mask.active_scalars, i2d.flat, 0)
 
-    mesh = mesh.contour([cutoff], preference='cell')
+    mesh = mask.contour([0.5], preference='cell')
 
   if int(extract_largest):
     mesh = mesh.extract_surface()

@@ -561,6 +561,7 @@ def vtk_spacing_fit(dims, d0, d1, cell = None):
     spacing = np.divide(np.multiply(np.maximum(np.subtract(dims, 1), 1), d0), d1)
   return spacing
 
+# TODO: np.meshgrid(x, y, z, indexing='ij')
 def vtk_shape_ijk(dims, cell = None):
   shape = np.flipud(dims)
   if cell:
@@ -701,20 +702,20 @@ class vtk_Voxel(object):
   @classmethod
   def from_bb(cls, bb, cell_size = None, ndim = 3, border = 1):
     dims = np.maximum(np.ceil(np.divide(np.subtract(bb[1], bb[0]), cell_size)), 1)
-    # increase non flat dimensions by 2
     if cell_size is None:
       cell_size = np.full(3, 10, dtype=np.int_)
     elif np.ndim(cell_size) == 0:
       cell_size = np.full(3, cell_size, dtype=np.int_)
     
     origin = bb[0]
+    # increase non flat dimensions
     if border > 0:
       dims = np.add(dims, np.multiply(np.greater(dims, 1), border * 2))
       origin = np.subtract(origin, np.multiply(cell_size, border))
 
     if ndim == 2:
       dims[2] = 1
-      origin[2] = 0
+      origin[2] = np.mean(bb[:,2])
     dims = dims.astype(np.int_).tolist()
     return cls.cls_init(dims, cell_size, origin)
   
